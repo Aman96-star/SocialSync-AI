@@ -1,0 +1,355 @@
+name: release desktop
+
+# Build the desktop installers (macOS .dmg + Windows .exe) and attach them to a
+# GitHub Release. Mirrors release-npm.yml / release-image.yml: it runs on a
+# published release (owner action) or a manual dispatch, never on a normal push.
+#
+# CERT-FREE BY DESIGN. Every step that does not need a certificate - building the
+# dashboard, assembling the runtime bundle (with a checksum-verified Node), making
+# the .dmg / .exe - runs unconditionally. Signing + notarization are gated on the
+# owner's secrets being present, so:
+#   * workflow_dispatch  -> always produces UNSIGNED installers as build artifacts
+#                           (so the pipeline is testable today, before any certs).
+#   * release + secrets   -> produces SIGNED + NOTARIZED installers, attached to the
+#                           release as pendpost-macos.dmg / pendpost-windows-setup.exe.
+#   * release, no secrets -> assembles everything, then SKIPS the upload (an unsigned
+#                           asset must never land on a public release) and prints how
+#                           to enable it.
+#   * workflow_dispatch with release_tag -> builds that tag's code and, with secrets,
+#                           attaches the signed .dmg to that EXISTING release. This is
+#                           how a release that missed its .dmg gets it back without
+#                           cutting a new version (a plain re-run reuses the old
+#                           workflow file, so it cannot pick up a fix made here).
+#
+# GUARD: the verify-assets job fails the run whenever a release ends up without
+# pendpost-macos.dmg, whatever the cause (runner label retired, signing secrets
+# gone, notary down). pendpost.com/download links to that asset, so a missing .dmg
+# is a broken download, never a cosmetic gap. v2.12.0 and v2.12.1 shipped without
+# one for days because the macOS job was cancelled before its first step and
+# nothing went red.
+#
+# Owner secrets to enable signing (see packaging/desktop/README.md):
+#   macOS  : APPLE_DEVELOPER_ID_CERT_P12_BASE64, APPLE_DEVELOPER_ID_CERT_PASSWORD,
+#            APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
+#   Windows: WINDOWS_CERT_PFX_BASE64, WINDOWS_CERT_PASSWORD
+#
+# The download buttons stay hidden until DESKTOP_AVAILABLE is flipped to true in
+# web/src/data/brand.ts - do that only after the first signed release verifies.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release to attach the signed .dmg to (e.g. v2.12.1). Empty = unsigned build artifact only."
+        required: false
+        default: ""
+
+permissions:
+  contents: write # upload assets to the release
+
+jobs:
+  # ---------------------------------------------------------------- macOS -----
+  macos:
+    # GitHub-hosted macOS: free + unlimited on this PUBLIC repo, so there is no
+    # self-hosted runner to register or keep online. The Developer ID cert is
+    # imported from secrets into an ephemeral keychain below, so hosted signing
+    # works without a pre-provisioned Mac.
+    #
+    # `macos-latest`, not a pinned version: GitHub retired every macOS 14 image on
+    # 2026-11-02, after which `macos-14` jobs are refused with "The configuration
+    # 'macos-14-arm64-us-default' is not supported" and end up cancelled with zero
+    # steps. The build only needs swiftc + lipo + hdiutil + codesign + notarytool,
+    # and the launcher targets macOS 12, so following the newest image is safer
+    # than a pin that silently ages out. verify-assets below catches any breakage.
+    runs-on: macos-latest
+    # Must exceed the notarize step's `notarytool --wait --timeout 45m`, else a
+    # slow-but-working Apple notary queue trips the JOB cap and cancels the run
+    # before stapling (happened on the first real release: Apple took ~28m+, the
+    # old 30m job cap killed it mid-wait). Hosted minutes are free on this public
+    # repo, so give the 45m notary budget ~13m of headroom for sign/staple/upload.
+    timeout-minutes: 58
+    if: github.repository == 'pendpost/pendpost'
+    env:
+      # The release this run attaches to: the published release, or the
+      # release_tag a dispatch names. Empty = dispatch build, artifact only.
+      # Reaches shells only via env + quoting, never inline ${{ }} in run - the
+      # documented defense against workflow script injection.
+      TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+    steps:
+      - name: Check the target release
+        if: github.event_name == 'workflow_dispatch' && env.TAG != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Fail in seconds, not after a 10-minute build + notarization.
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::release_tag must look like v1.2.3, got: $TAG" >&2; exit 1
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName
+
+      - uses: actions/checkout@v7
+        with:
+          # Build exactly the tagged code on a release_tag dispatch (empty = the
+          # default ref: the release tag, or the dispatched branch).
+          ref: ${{ inputs.release_tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [ -n "$TAG" ]; then
+            v="${TAG#v}"
+          else
+            v="$(node -p "require('./package.json').version")"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Detect signing capability
+        id: signing
+        shell: bash
+        # Renders to the literal true/false (never the secret value), so it is safe
+        # to print and to gate later steps on.
+        run: echo "enabled=${{ secrets.APPLE_DEVELOPER_ID_CERT_P12_BASE64 != '' && secrets.APPLE_APP_PASSWORD != '' }}" >> "$GITHUB_OUTPUT"
+
+      # CERT-FREE: build the dashboard, stage the product files (guarded against
+      # leaking credentials), and bundle a checksum-verified UNIVERSAL Node.
+      - name: Assemble runtime bundle
+        shell: bash
+        run: node packaging/desktop/build-bundle.mjs --platform mac --out build/desktop-mac
+
+      # CERT-FREE: compile the universal launcher and assemble pendpost.app.
+      - name: Assemble pendpost.app
+        shell: bash
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          chmod +x packaging/desktop/macos/build-app.sh
+          packaging/desktop/macos/build-app.sh build/desktop-mac/runtime build/pendpost.app "$VERSION"
+
+      # GATED: import the Developer ID cert into an ephemeral keychain.
+      - name: Import Developer ID certificate
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          CERT_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERT_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/pendpost-signing.keychain-db"
+          KC_PW="$(openssl rand -base64 24)"
+          security create-keychain -p "$KC_PW" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PW" "$KEYCHAIN"
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PW" "$KEYCHAIN" >/dev/null
+          # Make the ephemeral keychain the search list so codesign finds the
+          # identity (the runner is discarded after the job, so no need to preserve
+          # the login keychain).
+          security list-keychains -d user -s "$KEYCHAIN"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | grep 'Developer ID Application' | head -1 | grep -oE '[0-9A-F]{40}')"
+          if [ -z "$IDENTITY" ]; then echo "No Developer ID Application identity found in the imported cert." >&2; exit 1; fi
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      # GATED: sign (hardened runtime + JIT entitlements for the bundled Node),
+      # build the .dmg, sign it, notarize, and staple.
+      - name: Sign, notarize, and package .dmg
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/pendpost.app"
+          ENT="packaging/desktop/macos/entitlements.plist"
+          # Sign the bundled Node first (inner Mach-O), then the app bundle. The
+          # JIT entitlements let V8 run under the hardened runtime.
+          codesign --force --options runtime --timestamp --entitlements "$ENT" --sign "$SIGN_IDENTITY" "$APP/Contents/Resources/runtime/node"
+          codesign --force --options runtime --timestamp --entitlements "$ENT" --sign "$SIGN_IDENTITY" "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          hdiutil create -volname pendpost -srcfolder "$APP" -ov -format UDZO build/pendpost-macos.dmg
+          codesign --force --timestamp --sign "$SIGN_IDENTITY" build/pendpost-macos.dmg
+          # --timeout bounds the submit so a genuinely hung notary (e.g. stuck
+          # "initiating connection") can't burn the whole job budget. 20m was too
+          # tight: Apple ACCEPTED the submission but its processing exceeded 20m
+          # (common on a first submission), which failed the run even though
+          # notarization was working. 45m gives the notary room while still
+          # bounding a real hang; re-run if Apple is in a multi-hour backlog.
+          xcrun notarytool submit build/pendpost-macos.dmg \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" \
+            --wait --timeout 45m
+          xcrun stapler staple build/pendpost-macos.dmg
+          xcrun stapler validate build/pendpost-macos.dmg
+
+      # CERT-FREE fallback: an unsigned .dmg so dispatch runs still produce a
+      # testable artifact (it trips Gatekeeper - never attached to a release).
+      - name: Package unsigned .dmg
+        if: steps.signing.outputs.enabled != 'true'
+        shell: bash
+        run: hdiutil create -volname pendpost -srcfolder build/pendpost.app -ov -format UDZO build/pendpost-macos.dmg
+
+      - name: Attach .dmg to the release
+        if: env.TAG != '' && steps.signing.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release upload "$TAG" build/pendpost-macos.dmg --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Release without signing secrets (skip upload)
+        if: env.TAG != '' && steps.signing.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          echo "::warning title=macOS desktop asset not attached::Apple signing secrets are not set, so the unsigned .dmg was NOT attached to this release (it would trip Gatekeeper). Add APPLE_DEVELOPER_ID_CERT_P12_BASE64, APPLE_DEVELOPER_ID_CERT_PASSWORD, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD (see packaging/desktop/README.md) and re-run."
+
+      - name: Upload .dmg as a build artifact (dispatch)
+        if: github.event_name == 'workflow_dispatch' && env.TAG == ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: pendpost-macos-dmg
+          path: build/pendpost-macos.dmg
+
+  # -------------------------------------------------------------- Windows -----
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    if: github.repository == 'pendpost/pendpost'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ "$EVENT" = "release" ]; then
+            v="${TAG#v}"
+          else
+            v="$(node -p "require('./package.json').version")"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Detect signing capability
+        id: signing
+        shell: bash
+        run: echo "enabled=${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}" >> "$GITHUB_OUTPUT"
+
+      # CERT-FREE: build the dashboard, stage the product files, bundle node.exe,
+      # and drop launch.cmd next to the runtime so Inno can pick both up.
+      - name: Assemble runtime bundle
+        shell: bash
+        run: |
+          node packaging/desktop/build-bundle.mjs --platform win --out build/desktop-win
+          cp packaging/desktop/windows/launch.cmd build/desktop-win/launch.cmd
+
+      # CERT-FREE: compile the installer.
+      - name: Build the installer (Inno Setup)
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = Get-ChildItem 'C:\Program Files (x86)\Inno Setup *\ISCC.exe' | Sort-Object FullName | Select-Object -Last 1
+          if (-not $iscc) { throw 'ISCC.exe not found after installing Inno Setup' }
+          $staging = Join-Path $env:GITHUB_WORKSPACE 'build\desktop-win'
+          & $iscc.FullName "/DMyAppVersion=$env:VERSION" "/DStagingDir=$staging" 'packaging\desktop\windows\pendpost.iss'
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
+
+      # GATED: code-sign the installer.
+      - name: Sign the installer
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' | Sort-Object FullName | Select-Object -Last 1
+          if (-not $signtool) { throw 'signtool.exe not found' }
+          $exe = 'build\desktop-win\out\pendpost-windows-setup.exe'
+          & $signtool.FullName sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 /f $pfx /p $env:WINDOWS_CERT_PASSWORD $exe
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed ($LASTEXITCODE)" }
+          Remove-Item $pfx -Force
+
+      - name: Attach installer to the release
+        if: github.event_name == 'release' && steps.signing.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        shell: bash
+        run: gh release upload "$TAG" build/desktop-win/out/pendpost-windows-setup.exe --clobber
+
+      - name: Release without signing secrets (skip upload)
+        if: github.event_name == 'release' && steps.signing.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          echo "::warning title=Windows desktop asset not attached::WINDOWS_CERT_PFX_BASE64 is not set, so the unsigned installer was NOT attached to this release (it would trip SmartScreen). Add WINDOWS_CERT_PFX_BASE64 + WINDOWS_CERT_PASSWORD (see packaging/desktop/README.md) and re-run."
+
+      - name: Upload installer as a build artifact (dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: pendpost-windows-setup
+          path: build/desktop-win/out/pendpost-windows-setup.exe
+
+  # ------------------------------------------------------- Asset guard -----
+  # Fails the run, loudly, whenever a release ends up without pendpost-macos.dmg.
+  # Runs even when the macos job is cancelled or fails (that is the whole point:
+  # v2.12.0 and v2.12.1 lost their .dmg to a job cancelled before step one, and
+  # the run only showed a grey "cancelled"). Release-day signal for the operator;
+  # pendpost.com/download separately falls back to the newest release that still
+  # has a .dmg, so users are never sent to a 404 in the meantime.
+  verify-assets:
+    needs: macos
+    if: >-
+      always() && github.repository == 'pendpost/pendpost' &&
+      (github.event_name == 'release' || inputs.release_tag != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Release carries pendpost-macos.dmg
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+          MACOS_RESULT: ${{ needs.macos.result }}
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if grep -qx 'pendpost-macos.dmg' <<<"$assets"; then
+            echo "Release $TAG carries pendpost-macos.dmg." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          fix="gh workflow run release-desktop.yml --repo $GITHUB_REPOSITORY --ref main -f release_tag=$TAG"
+          {
+            echo "## macOS download missing on $TAG"
+            echo "The macos job ended as **$MACOS_RESULT** and the release has no pendpost-macos.dmg."
+            echo "pendpost.com/download is serving the newest older release that has one."
+            echo "Fix the macos job (check its annotations), land the fix on main, then run:"
+            echo '```'
+            echo "$fix"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=macOS download missing::Release $TAG has no pendpost-macos.dmg (macos job: $MACOS_RESULT). After fixing the macos job, re-attach with: $fix"
+          exit 1

@@ -1,0 +1,60 @@
+# Contributing to pendpost
+
+Thanks for your interest in pendpost. This guide covers how to run it, the rules that keep it coherent, and what we will not merge.
+
+## Giving feedback and proposing changes
+
+You do not need to write code to move pendpost forward. Pick the path that matches what you have:
+
+- **A quick idea or piece of feedback.** Use the **Share feedback** link in the dashboard, open the feedback issue form, or post in [Discussions](https://github.com/pendpost/pendpost/discussions) under Ideas. Feedback never phones home: the in-app link just opens your browser on a prefilled GitHub page, and it prefills only non-sensitive facts (version, run method, mode, Node, OS), never your `.env` or any credential.
+- **A concrete bug or feature.** Open an issue and pick the bug report or feature request form. The form asks for what a maintainer needs to act on it.
+- **A deeper, design-level change** (a new plugin seam, a persistence change, anything that touches how the core works). Start an RFC: see [`docs/rfcs/README.md`](docs/rfcs/README.md), copy the template, and open the discussion in the RFCs category. This gets design agreement before anyone writes the code.
+
+For where to get help rather than give feedback, see [SUPPORT.md](SUPPORT.md).
+
+## Running it
+
+pendpost runs with zero credentials: set `PENDPOST_MODE=mock` and it drives the full loop through the credential-free mock driver, so you do not need any real accounts to develop against it.
+
+```bash
+npm start            # boot the server on http://127.0.0.1:8090
+npm run check        # run the full check: syntax, parity, and the test suite
+```
+
+A fresh workspace starts with no campaigns. Start pendpost with `PENDPOST_MODE=mock` and every platform lane runs through the credential-free mock driver; drive the full loop `draft -> approve -> schedule -> publish -> insights` there before you touch live credentials. Without `PENDPOST_MODE=mock` pendpost is live, so an unconnected lane waits for its credential rather than publishing. Build the dashboard with `npm run build` if it is not already built.
+
+## Branching and releases
+
+pendpost uses three long-lived branches:
+
+- `develop` is the default branch where all changes integrate first. Open your pull requests against this branch.
+- `staging` is a pre-release branch for verifying a batch of changes before release.
+- `main` is the released branch. Releases are tagged here.
+
+Work on a short-lived feature branch and open a pull request into `develop`. Changes promote in one direction only: `develop` to `staging` to `main`. Please do not open pull requests against `main` directly.
+
+## Commit messages
+
+pendpost follows [Conventional Commits](https://www.conventionalcommits.org). Prefix the subject with a type (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, or `ci`) followed by a short imperative summary, for example `fix: stop the cadence cap from dropping bursts`. Keep the subject under about 72 characters. This keeps the history readable and lets the release notes group changes by type. For a user-facing change, add a line under `## [Unreleased]` in `CHANGELOG.md`.
+
+## The parity rule
+
+Every capability ships on both faces: the JSON API (`/api`) and the MCP face (`/mcp`). If you add a write capability to one face, add it to the other. `test/parity-check.mjs` enforces this statically by reading the route table in `lib/api.mjs` (each entry carries an `mcpTool` key) and the tools array in `lib/mcp.mjs`, and it fails the build on any drift. If a capability is genuinely single-faced by design, document the exemption in `docs/plans/platform/API-CONTRACT.md` with a one-line justification. `npm run check` runs this for you.
+
+## House style
+
+- No em dashes or en dashes anywhere. Use a hyphen, a comma, or restructure. This is also a brand-lint rule that pendpost ships.
+- English only.
+- The brand name is always lowercase `pendpost`, even at the start of a sentence where possible. Never `PendPost` or `Pendpost`.
+
+## Brand-lint rules
+
+The brand-lint rule set lives in `rules.json`. To add a rule, append an object with an `id`, a `severity` (`error` blocks publish, `warn` is advisory), a `matcher` (a regex `{ "regex": ..., "flags": ... }` or a platform-aware built-in like `captionLength`, `hashtagCount`, `allCaps`, `brokenLink`), and a `hint`. To disable a rule, delete its object (or flip its severity to `warn`). A `rules.json` at the workspace root overrides the shipped default at the install root.
+
+## Maintainer response time
+
+pendpost is maintained part-time by a small team. We do read every issue and pull request, but please expect that reviews and replies can take a while. Clear reproduction steps and small, focused pull requests get merged fastest. For where to get help, see [SUPPORT.md](SUPPORT.md); for how the project is governed and how decisions are made, see [GOVERNANCE.md](GOVERNANCE.md).
+
+## The one hard line
+
+Never add code that posts without the approval gate. Publishing is fail-closed by design: a post with no approval must not publish, and the actor who created a post must not be able to approve it. Any change that weakens or bypasses the approval gate will be rejected.

@@ -1,0 +1,169 @@
+#!/usr/bin/env node
+// test/supply-chain.test.mjs - NFR-LIC-01 supply-chain hygiene as a gate.
+//
+// (a) the ROOT package.json declares ZERO runtime dependencies (no "dependencies"
+//     key, or it is an empty object). The server core is node: built-ins only;
+//     a single runtime dep added by accident must fail the build here.
+// (b) the version string is IDENTICAL across the four places that carry it -
+//     package.json, lib/util.mjs (VERSION), CITATION.cff, and the latest
+//     released CHANGELOG.md heading - so a release can never half-bump.
+//
+// Zero-dep node:assert. This test reads files only (no PENDPOST_ROOT needed): it
+// asserts repository invariants, not per-instance behaviour.
+import assert from 'node:assert';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(__dirname, '..');
+
+let pass = 0;
+const ok = (cond, msg) => { assert.ok(cond, msg); console.log(`  ok - ${msg}`); pass += 1; };
+const read = (rel) => fs.readFileSync(path.join(REPO, rel), 'utf8');
+
+// ---- (a) zero runtime dependencies in the ROOT package.json ----------------
+const pkg = JSON.parse(read('package.json'));
+const deps = pkg.dependencies;
+ok(
+  deps == null || (typeof deps === 'object' && !Array.isArray(deps) && Object.keys(deps).length === 0),
+  `root package.json has zero runtime dependencies (${deps ? Object.keys(deps).join(', ') || 'empty {}' : 'no dependencies key'})`,
+);
+
+// ---- (b) one version string, four sources of truth -------------------------
+// package.json version is the canonical value the other three must equal.
+const pkgVersion = pkg.version;
+ok(typeof pkgVersion === 'string' && /^\d+\.\d+\.\d+/.test(pkgVersion), `package.json version is a semver string (${pkgVersion})`);
+
+// lib/util.mjs: export const VERSION = '<x.y.z>';
+const utilSrc = read('lib/util.mjs');
+const utilMatch = utilSrc.match(/export\s+const\s+VERSION\s*=\s*'([^']+)'/);
+ok(Boolean(utilMatch), 'lib/util.mjs exports a VERSION constant');
+ok(utilMatch[1] === pkgVersion, `lib/util.mjs VERSION (${utilMatch[1]}) matches package.json (${pkgVersion})`);
+
+// CITATION.cff: version: <x.y.z>  (a YAML scalar, optionally quoted).
+const cffSrc = read('CITATION.cff');
+const cffMatch = cffSrc.match(/^version:\s*["']?([^"'\s]+)["']?\s*$/m);
+ok(Boolean(cffMatch), 'CITATION.cff carries a version field');
+ok(cffMatch[1] === pkgVersion, `CITATION.cff version (${cffMatch[1]}) matches package.json (${pkgVersion})`);
+
+// server.json (MCP registry manifest): both the top-level server version AND the
+// npm package entry's version must equal package.json. The registry-publish
+// workflow hard-fails on this mismatch AT PUBLISH TIME - catch it locally instead
+// (the 1.2.1 release shipped with server.json still at 1.2.0 and only the workflow caught it).
+const serverJson = JSON.parse(read('server.json'));
+ok(serverJson.version === pkgVersion, `server.json version (${serverJson.version}) matches package.json (${pkgVersion})`);
+const npmPkgEntry = (serverJson.packages || []).find((p) => p.registryType === 'npm');
+ok(Boolean(npmPkgEntry), 'server.json declares an npm package entry');
+ok(npmPkgEntry.version === pkgVersion, `server.json npm package version (${npmPkgEntry.version}) matches package.json (${pkgVersion})`);
+
+// Directory plugin bundles. Cursor (repo root): manifest version and the exact npx pin must
+// equal package.json, since a stale pin would install an old release. Claude
+// (packaging/claude-plugin): the directory refuses local stdio servers from unverified orgs,
+// so the bundle connects to the running daemon's loopback HTTP endpoint and runs nothing.
+{
+  const v = JSON.parse(read('.cursor-plugin/plugin.json')).version;
+  ok(v === pkgVersion, `Cursor plugin manifest version (${v}) matches package.json (${pkgVersion})`);
+  const mcpDoc = JSON.parse(read('mcp.json'));
+  const servers = Object.values(mcpDoc.mcpServers || mcpDoc);
+  const pins = servers.flatMap((sv) => (sv.args || []).filter((a) => /^pendpost(@|$)/.test(a)).map((a) => a.split('@')[1]));
+  ok(pins.length === 1 && pins[0] === pkgVersion, `Cursor plugin npx launcher is pinned to pendpost@${pkgVersion} (got ${pins.join(', ') || 'none'})`);
+}
+{
+  const v = JSON.parse(read('packaging/claude-plugin/.claude-plugin/plugin.json')).version;
+  ok(v === pkgVersion, `Claude plugin manifest version (${v}) matches package.json (${pkgVersion})`);
+  const servers = Object.values(JSON.parse(read('packaging/claude-plugin/.mcp.json')));
+  ok(servers.length === 1 && servers[0].type === 'http' && servers[0].url === 'http://127.0.0.1:8090/mcp' && !servers[0].command,
+    'Claude plugin connects to the daemon over HTTP at 127.0.0.1:8090/mcp and launches no local program');
+}
+
+// CHANGELOG.md: the latest RELEASED heading is the first "## [x.y.z]" that is
+// not the "[Unreleased]" placeholder. That heading's version must match.
+const changelog = read('CHANGELOG.md');
+const headings = [...changelog.matchAll(/^##\s*\[([^\]]+)\]/gm)].map((m) => m[1]);
+const latestReleased = headings.find((h) => h.toLowerCase() !== 'unreleased') || null;
+ok(Boolean(latestReleased), `CHANGELOG.md has a released version heading (latest: ${latestReleased})`);
+ok(latestReleased === pkgVersion, `latest released CHANGELOG.md heading (${latestReleased}) matches package.json (${pkgVersion})`);
+
+// CITATION.cff date-released must be the date on that same CHANGELOG heading.
+// `ops/release.mjs bump` writes it; this catches a hand bump that left it stale
+// (2.10.0 shipped 2026-11-02 while the file still said 2026-10-14).
+const headingDate = (changelog.match(new RegExp(`^##\\s*\\[${pkgVersion.replace(/\./g, '\\.')}\\]\\s*-\\s*(\\d{4}-\\d{2}-\\d{2})`, 'm')) || [])[1];
+const cffDate = (cffSrc.match(/^date-released:\s*["']?(\d{4}-\d{2}-\d{2})["']?\s*$/m) || [])[1];
+ok(Boolean(headingDate), `CHANGELOG.md [${pkgVersion}] heading carries a release date`);
+ok(cffDate === headingDate, `CITATION.cff date-released (${cffDate}) matches the CHANGELOG.md [${pkgVersion}] date (${headingDate})`);
+
+// ---- (c) the published tarball allowlist stays tight -----------------------
+// package.json `files` is an ALLOWLIST and npm does NOT apply .gitignore when it
+// is present (and there is no .npmignore), so a bare "data/" / "app/" / "docs/"
+// entry ships the owner's working data - including per-client .env credentials -
+// plus the dashboard source and internal runbooks to the public registry. Lock
+// the allowlist to the BUILT dashboard + the shipped contract, and forbid the
+// over-broad entries. Guards the credential/private-data leak this caught.
+const files = Array.isArray(pkg.files) ? pkg.files : [];
+// Forbid the bare app//data//docs/ catch-alls AND any data/clients entry (the
+// per-client subtree that holds the .env credentials + private working data).
+const overBroad = files.filter((f) => /^(app|data|docs)\/?$/.test(f) || /^data\/clients(\/|$)/.test(f));
+ok(overBroad.length === 0,
+  `package.json files has no over-broad dir (offenders: ${overBroad.join(', ') || 'none'}) - ship app/dist/ + clean data/ example dirs, never bare app//data//docs/ or data/clients/`);
+ok(files.includes('app/dist/'), 'package.json files ships the built dashboard (app/dist/)');
+// app/dist/ is a BUILT artifact, not committed - so a lifecycle hook must
+// rebuild it before npm packs the tarball, or the allowlist entry above ships an
+// empty dir. Assert a prepack (or prepublishOnly) script runs the build, so the
+// wiring that guarantees a bare `npm pack` rebuilds the dashboard can never
+// silently disappear. Reads package.json only - does NOT require app/dist on disk.
+const scripts = pkg.scripts && typeof pkg.scripts === 'object' ? pkg.scripts : {};
+const buildHook = scripts.prepack ?? scripts.prepublishOnly;
+ok(
+  typeof buildHook === 'string' && /\bnpm run build\b/.test(buildHook),
+  `package.json has a prepack/prepublishOnly hook that runs the build (${buildHook || 'none'}) - so app/dist/ is rebuilt before pack`,
+);
+ok(files.includes('AGENTS.md'), 'package.json files ships the AGENTS.md contract');
+ok(!files.some((f) => /(^|\/)\.env$/.test(f)),
+  'package.json files ships no raw .env (only .env.example is allowed)');
+
+// ---- (d) no private client name anywhere in the npm `files` set ------------
+// 2.6.0 and 2.6.1 shipped code comments naming a private client (incident notes).
+// Walk exactly what npm packs (every `files` entry that exists on disk, plus
+// package.json) and fail on any path or text line that names one. The names are
+// stored as sha256 hashes, not literals: this file ships in the public repo, and a
+// guard that spells out what it guards would be the leak itself. Matching is per
+// word token (split on non-alphanumerics and camelCase), compared whole AND by its
+// prefix of the name's length, so "<name>'s", "<name>-platform" and "<name>Id" all
+// hit. ops/publish-oss.mjs runs the literal version of this over the public mirror.
+const PRIVATE_NAME_HASHES = [
+  { len: 8, sha256: '6d5f5d25ce12a4105a3d5de560a9506144ce0406247cfa4052db4c545630500d' },
+];
+const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
+const seen = new Map();
+const isPrivate = (token) => {
+  const t = token.toLowerCase();
+  if (!seen.has(t)) seen.set(t, PRIVATE_NAME_HASHES.some((h) => t.length >= h.len && sha(t.slice(0, h.len)) === h.sha256));
+  return seen.get(t);
+};
+const namesPrivate = (text) => text.split(/[^A-Za-z0-9]+/)
+  .flatMap((w) => w.split(/(?<=[a-z0-9])(?=[A-Z])/))
+  .some(isPrivate);
+const SKIP = new Set(['node_modules', '.git', '.DS_Store']);
+const packed = [];
+const collect = (rel) => {
+  const abs = path.join(REPO, rel);
+  if (!fs.existsSync(abs)) return;
+  if (fs.statSync(abs).isDirectory()) {
+    for (const e of fs.readdirSync(abs)) if (!SKIP.has(e)) collect(path.posix.join(rel, e));
+  } else packed.push(rel);
+};
+for (const f of new Set(['package.json', ...files])) collect(f.replace(/\/$/, ''));
+const nameHits = [];
+for (const rel of packed) {
+  if (namesPrivate(rel)) nameHits.push(`${rel} (path)`);
+  const buf = fs.readFileSync(path.join(REPO, rel));
+  if (buf.subarray(0, 8192).includes(0)) continue; // binary (media)
+  buf.toString('utf8').split('\n').forEach((line, i) => { if (namesPrivate(line)) nameHits.push(`${rel}:${i + 1}`); });
+}
+ok(packed.length > 0 && packed.includes('lib/util.mjs'), `the npm files walk found the packed set (${packed.length} files)`);
+ok(nameHits.length === 0,
+  `no private client name in the npm files set (hits: ${nameHits.slice(0, 20).join(', ') || 'none'}${nameHits.length > 20 ? ` and ${nameHits.length - 20} more` : ''})`);
+
+console.log(`[supply-chain] OK - zero runtime deps + version parity + tight publish allowlist + no private client names across package.json, lib/util.mjs, CITATION.cff, CHANGELOG.md (${pass} assertions).`);

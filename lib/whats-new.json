@@ -1,0 +1,275 @@
+{
+  "$comment": "What's new, shown once in the Studio after an update. One entry per released version, newest first. Each entry holds 2 to 4 items: kind (new, improved or fixed), icon (a lucide name from ICONS in lib/whats-new.mjs), a title of 2 to 5 words (max 32 characters, no period) and a body of ONE plain sentence (max 90 characters), both in en and de-CH (real umlauts, never the sharp s, du-form), run through the humanizer, no em dashes. Optional go: a spot key the Studio maps to the page where the feature lives. Write the entry before `node ops/release.mjs bump`; test/whats-new.test.mjs fails when the running VERSION has none. The full notes link is https://pendpost.com/changelog#v<version>.",
+  "releases": [
+    {
+      "version": "2.13.1",
+      "date": "2026-11-12",
+      "items": [
+        {
+          "kind": "fixed", "icon": "shield-check",
+          "title": { "en": "No example campaign", "de-CH": "Keine Beispielkampagne" },
+          "body": {
+            "en": "A new install starts empty, so no example post can go out on a real account.",
+            "de-CH": "Eine neue Installation startet leer, also geht kein Beispielbeitrag auf ein echtes Konto."
+          }
+        },
+        {
+          "kind": "improved", "icon": "layers",
+          "title": { "en": "Mock mode starts clean", "de-CH": "Mock-Modus startet leer" },
+          "body": {
+            "en": "Mock mode opens an empty workspace in your temp folder, like a real first run.",
+            "de-CH": "Der Mock-Modus öffnet einen leeren Arbeitsbereich im Temp-Ordner, wie ein echter Start."
+          }
+        }
+      ]
+    },
+    {
+      "version": "2.13.0",
+      "date": "2026-11-12",
+      "items": [
+        {
+          "kind": "fixed", "icon": "shield-check",
+          "title": { "en": "Ten security fixes", "de-CH": "Zehn Lücken geschlossen" },
+          "body": {
+            "en": "Connected agents can no longer reach your files or owner actions.",
+            "de-CH": "Verbundene Agenten kommen nicht mehr an deine Dateien oder Owner-Aktionen."
+          }
+        },
+        {
+          "kind": "improved", "icon": "refresh-cw",
+          "title": { "en": "Check again shows it ran", "de-CH": "Erneut prüfen zeigt Wirkung" },
+          "body": {
+            "en": "Every Check again shows it's working, then the result, even when nothing changed.",
+            "de-CH": "Jede erneute Prüfung zeigt, dass sie läuft, und dann das Ergebnis, auch ohne Änderung."
+          }
+        },
+        {
+          "kind": "fixed", "icon": "calendar",
+          "title": { "en": "Empty weeks find your posts", "de-CH": "Leere Wochen finden Beiträge" },
+          "body": {
+            "en": "An empty week or month in the planner jumps to your nearest post.",
+            "de-CH": "Eine leere Woche oder ein leerer Monat im Planer springt zum nächsten Beitrag."
+          }
+        },
+        {
+          "kind": "fixed", "icon": "wrench",
+          "title": { "en": "Updates wait for your edits", "de-CH": "Updates warten auf Änderungen" },
+          "body": {
+            "en": "An update no longer asks you to commit files and waits until your edits are done.",
+            "de-CH": "Ein Update verlangt keinen Commit mehr und wartet, bis deine Änderungen fertig sind."
+          }
+        }
+      ]
+    },
+    {
+      "version": "2.12.1",
+      "date": "2026-11-09",
+      "items": [
+        {
+          "kind": "fixed", "icon": "pen-line",
+          "title": { "en": "Edits reach the cloud", "de-CH": "Änderungen erreichen die Cloud" },
+          "body": {
+            "en": "Change a post the cloud already holds and it takes the old copy back.",
+            "de-CH": "Änderst du einen Beitrag, den die Cloud schon hat, zieht sie die alte Fassung zurück."
+          }
+        },
+        {
+          "kind": "fixed", "icon": "trash-2",
+          "title": { "en": "Removed means removed", "de-CH": "Entfernt heisst entfernt" },
+          "body": {
+            "en": "Park, unapprove or delete a post and the cloud won't send it either.",
+            "de-CH": "Parkst, verwirfst oder löschst du einen Beitrag, sendet ihn auch die Cloud nicht."
+          }
+        }
+      ]
+    },
+    {
+      "version": "2.12.0",
+      "date": "2026-11-06",
+      "items": [
+        {
+          "kind": "improved", "icon": "list-checks", "go": "approvals",
+          "title": { "en": "Bulk approve skips blocked posts", "de-CH": "Blockiertes bleibt draussen" },
+          "body": {
+            "en": "Approving many posts leaves out the ones that can't go out, and one line says why.",
+            "de-CH": "Gibst du viele Beiträge frei, bleiben blockierte draussen, und eine Zeile sagt, warum."
+          }
+        },
+        {
+          "kind": "improved", "icon": "wrench", "go": "approvals",
+          "title": { "en": "Fix it on the card", "de-CH": "Direkt auf der Karte beheben" },
+          "body": {
+            "en": "A blocked post shows its cause in one short line, with the fix right beside it.",
+            "de-CH": "Ein blockierter Beitrag zeigt den Grund in einer kurzen Zeile, die Lösung gleich daneben."
+          }
+        },
+        {
+          "kind": "new", "icon": "sparkles",
+          "title": { "en": "Show me", "de-CH": "Zeig mir" },
+          "body": {
+            "en": "A note here can take you to the spot in the Studio where the change lives.",
+            "de-CH": "Ein Eintrag hier führt dich zur Stelle im Studio, an der sich etwas geändert hat."
+          }
+        }
+      ]
+    },
+    {
+      "version": "2.11.0",
+      "date": "2026-11-05",
+      "items": [
+        {
+          "kind": "new", "icon": "layers",
+          "title": { "en": "Also as story", "de-CH": "Auch als Story" },
+          "body": {
+            "en": "One post goes out as a feed post and as a story on Instagram and Facebook.",
+            "de-CH": "Ein Beitrag erscheint auf Instagram und Facebook als Feed-Beitrag und als Story."
+          }
+        },
+        {
+          "kind": "improved", "icon": "shield-check", "go": "approvals",
+          "title": { "en": "Approval after every edit", "de-CH": "Neue Freigabe bei Änderungen" },
+          "body": {
+            "en": "A new cover, an agent's fix or an edit to an approved post comes back to you.",
+            "de-CH": "Neues Cover, Korrektur des Agenten oder Änderung: Du gibst den Beitrag neu frei."
+          }
+        },
+        {
+          "kind": "improved", "icon": "image",
+          "title": { "en": "Picture first", "de-CH": "Bild zuerst" },
+          "body": {
+            "en": "Post cards lead with their picture or video.",
+            "de-CH": "Beitragskarten zeigen zuerst ihr Bild oder Video."
+          }
+        },
+        {
+          "kind": "improved", "icon": "list-checks", "go": "bulk-select",
+          "title": { "en": "Slim selection bar", "de-CH": "Schlanke Auswahlleiste" },
+          "body": {
+            "en": "Selecting posts brings up one slim line of icons.",
+            "de-CH": "Wählst du Beiträge aus, erscheint eine schlanke Zeile mit Symbolen."
+          }
+        }
+      ]
+    },
+    {
+      "version": "2.10.0",
+      "date": "2026-11-02",
+      "items": [
+        {
+          "kind": "new", "icon": "wrench", "go": "fix-tray",
+          "title": { "en": "Fix button for blocked posts", "de-CH": "Fix-Knopf für Blockaden" },
+          "body": {
+            "en": "Blocked posts get a fix button, and a tray atop the planner sorts them by cause.",
+            "de-CH": "Blockierte Beiträge haben einen Fix-Knopf, oben im Planer nach Ursache sortiert."
+          }
+        },
+        {
+          "kind": "new", "icon": "list-checks", "go": "bulk-select",
+          "title": { "en": "Many posts at once", "de-CH": "Mehrere Beiträge auf einmal" },
+          "body": {
+            "en": "In the planner List you approve, move or delete many posts in one go.",
+            "de-CH": "In der Planer-Liste gibst du viele Beiträge auf einmal frei, verschiebst oder löschst sie."
+          }
+        },
+        {
+          "kind": "new", "icon": "undo-2",
+          "title": { "en": "Undo and trash", "de-CH": "Rückgängig und Papierkorb" },
+          "body": {
+            "en": "Bulk actions can be undone, and deleted posts wait 30 days in the trash.",
+            "de-CH": "Sammelaktionen machst du rückgängig, und Gelöschtes bleibt 30 Tage im Papierkorb."
+          }
+        },
+        {
+          "kind": "improved", "icon": "radar", "go": "radar",
+          "title": { "en": "Fewer, stronger asks", "de-CH": "Weniger, bessere Anfragen" },
+          "body": {
+            "en": "Radar shows a handful of strong asks, and every reply to you lands in one list.",
+            "de-CH": "Radar zeigt wenige starke Anfragen, und jede Antwort an dich landet in einer Liste."
+          }
+        }
+      ]
+    },
+    {
+      "version": "2.9.0",
+      "date": "2026-10-28",
+      "items": [
+        {
+          "kind": "improved", "icon": "circle-alert",
+          "title": { "en": "Reasons in your language", "de-CH": "Gründe in deiner Sprache" },
+          "body": {
+            "en": "When a post can't be approved, the Studio says why and how to fix it.",
+            "de-CH": "Lässt sich ein Beitrag nicht freigeben, sagt dir das Studio, warum und wie du es behebst."
+          }
+        },
+        {
+          "kind": "improved", "icon": "shield-alert", "go": "approvals",
+          "title": { "en": "Red checks lock Approve", "de-CH": "Rote Prüfung sperrt Freigabe" },
+          "body": {
+            "en": "A check that blocks a post shows in red before you click Approve.",
+            "de-CH": "Eine Prüfung, die einen Beitrag blockiert, erscheint rot, bevor du freigibst."
+          }
+        },
+        {
+          "kind": "fixed", "icon": "youtube",
+          "title": { "en": "Complete YouTube uploads", "de-CH": "Vollständige YouTube-Uploads" },
+          "body": {
+            "en": "YouTube uploads carry the right language, a category and the AI disclosure.",
+            "de-CH": "YouTube-Uploads haben die richtige Sprache, eine Kategorie und den KI-Hinweis."
+          }
+        }
+      ]
+    },
+    {
+      "version": "2.8.0",
+      "date": "2026-10-27",
+      "items": [
+        {
+          "kind": "new", "icon": "images",
+          "title": { "en": "Facebook photos and carousels", "de-CH": "Facebook-Fotos und Karussells" },
+          "body": {
+            "en": "Facebook Pages get photo and carousel posts, checked like everything else.",
+            "de-CH": "Facebook-Seiten bekommen Foto- und Karussell-Beiträge, geprüft wie alles andere."
+          }
+        },
+        {
+          "kind": "new", "icon": "radar", "go": "radar",
+          "title": { "en": "Radar without drafts", "de-CH": "Radar ohne Entwürfe" },
+          "body": {
+            "en": "Radar finds and scores signals with reply drafting off, for when you write each reply.",
+            "de-CH": "Radar findet und bewertet Signale auch ohne Antwortentwürfe, wenn du selbst schreibst."
+          }
+        }
+      ]
+    },
+    {
+      "version": "2.7.0",
+      "date": "2026-10-14",
+      "items": [
+        {
+          "kind": "improved", "icon": "radar", "go": "radar",
+          "title": { "en": "Radar finds who needs you", "de-CH": "Radar findet, wer dich braucht" },
+          "body": {
+            "en": "It skips comments that only mention a keyword, and one tap teaches it more.",
+            "de-CH": "Radar übergeht Kommentare, die nur ein Stichwort nennen, und lernt aus einem Klick."
+          }
+        },
+        {
+          "kind": "improved", "icon": "bell-off",
+          "title": { "en": "Fewer alerts", "de-CH": "Weniger Meldungen" },
+          "body": {
+            "en": "pendpost only messages you when it can't fix a problem itself, and names the fix.",
+            "de-CH": "pendpost meldet sich nur, wenn es ein Problem nicht selbst löst, und nennt dir die Lösung."
+          }
+        },
+        {
+          "kind": "improved", "icon": "key-round",
+          "title": { "en": "No expired sign-ins", "de-CH": "Keine abgelaufenen Anmeldungen" },
+          "body": {
+            "en": "LinkedIn and X sign-ins renew themselves well before they expire.",
+            "de-CH": "Anmeldungen bei LinkedIn und X erneuern sich lange vor dem Ablauf von selbst."
+          }
+        }
+      ]
+    }
+  ]
+}

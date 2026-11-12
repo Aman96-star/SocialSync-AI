@@ -1,0 +1,157 @@
+// Shared optimistic action button - ONE state machine for every network action
+// (idle -> loading -> success [1.7s dwell] -> idle, or error [1.7s] -> idle).
+// Extracted from the near-identical RunNowButton / FetchButton machines so each
+// network-action button gives the same immediate idle->loading->success feedback.
+// A thrown value with `.canceled === true` is a user-cancel sentinel: snap back
+// to idle silently, no error flash.
+import { forwardRef, useEffect, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { cn } from './cn.js';
+
+export const DWELL_MS = 1700;
+
+// status: 'idle' | 'loading' | 'success' | 'error'
+export function useActionState() {
+  const [status, setStatus] = useState('idle');
+  const [error, setError] = useState(null);
+  const timerRef = useRef(null);
+
+  // A late dwell timer must never setState after unmount.
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  const run = async (fn) => {
+    if (status === 'loading') return;
+    setStatus('loading');
+    setError(null);
+    try {
+      await fn();
+      setStatus('success');
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setStatus('idle'), DWELL_MS);
+    } catch (err) {
+      if (err?.canceled === true) {
+        // User cancelled (declined a prompt/confirm): no error flash.
+        setStatus('idle');
+        return;
+      }
+      // No message means nothing to show: never invent the English 'Error', which the
+      // caller would render as the detail behind its "?". onError still fires with null.
+      setError(err?.message || null);
+      setStatus('error');
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setStatus('idle'), DWELL_MS);
+    }
+  };
+
+  return { status, error, run };
+}
+
+// The idle look per variant; success/error chips are shared across all variants.
+export const IDLE_VARIANTS = {
+  subtle: 'bg-zinc-200/60 text-zinc-700 hover:bg-zinc-300/60 dark:bg-zinc-800/60 dark:text-zinc-200 dark:hover:bg-zinc-700/60',
+  success: 'bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-300',
+  // FILLED emerald primary: the "go / approve" action reads as a solid green button, the
+  // top of the status staircase (brand/DESIGN.md §3: approved = emerald). AA-safe both ways,
+  // mirroring BTN_PRIMARY's light/dark pattern - white on emerald-700 clears 4.5:1 (emerald-600
+  // white text is ~3.2:1 and FAILS), and dark mode flips to a light emerald fill + dark ink.
+  primary: 'bg-emerald-700 text-white hover:bg-emerald-800 dark:bg-emerald-400 dark:text-emerald-950 dark:hover:bg-emerald-300',
+  danger: 'bg-red-500/10 text-red-700 hover:bg-red-500/20 dark:text-red-300',
+  // The "you do this part" tone (sky), for the one action pendpost hands back to the
+  // operator: a post on a lane pendpost cannot publish to, because the lane is not
+  // connected. Distinct from emerald=done, amber=pending, red=danger, cyan=scheduled.
+  //
+  // Spec 37 minted this for a Tier-0 Reddit hand-off and then retired it that same spec,
+  // leaving the variant unused. It is keyed on CONNECTIVITY now, not warmth: a connected
+  // Reddit lane still auto-publishes after approval, warm or cold or promo, exactly as
+  // spec 37's reversal decided. Do not read this as that hand-off returning.
+  manual: 'bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 dark:text-sky-300',
+  // A control that cannot act right now: a grey outline and muted ink, never a fill (Button's
+  // outline, ui/Button.jsx). A disabled primary keeps reading as live when only its opacity drops.
+  outline: 'text-zinc-500 ring-1 ring-zinc-900/10 dark:text-zinc-400 dark:ring-white/10',
+};
+const SIZES = {
+  sm: 'px-2.5 py-1.5 text-xs',
+  md: 'px-3.5 py-2 text-sm',
+  // Glyph only (empty labels plus an ariaLabel): a 28px square, the toolbar's control height.
+  icon: 'h-7 w-7 justify-center',
+};
+
+// forwardRef so the button composes with a Radix Slot trigger (e.g. <Tip>), which
+// needs to attach a ref to its single child to anchor + reveal on hover AND focus.
+const ActionButton = forwardRef(function ActionButton({
+  onAction,
+  labels = {},
+  icon: Icon,
+  variant = 'subtle',
+  size = 'sm',
+  className,
+  disabled,
+  onError,
+  ariaLabel,
+  // quietError: a refusal is told by the caller's alert (ActionError) beside the button, so
+  // the button keeps its idle look and verb instead of turning into a red "Error" that is
+  // not an action. onError still fires.
+  quietError = false,
+  ...rest
+}, ref) {
+  const { status: runStatus, error, run } = useActionState();
+  const status = quietError && runStatus === 'error' ? 'idle' : runStatus;
+
+  // Surface a real (non-canceled) error to the caller for a persistent message. The
+  // message is null when the thrown error carried none; the caller says its own sentence.
+  useEffect(() => {
+    if (runStatus === 'error') onError?.(error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runStatus]);
+
+  const label = labels[status] ?? labels.idle;
+  const loading = status === 'loading';
+  const glyph = size === 'icon' ? 15 : 13;
+
+  return (
+    <button
+      ref={ref}
+      {...rest}
+      type="button"
+      onClick={() => run(onAction)}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      aria-label={ariaLabel}
+      className={cn(
+        'flex items-center gap-1.5 rounded-xl font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-50',
+        SIZES[size] || SIZES.sm,
+        status === 'success'
+          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+          : status === 'error'
+            ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+            : IDLE_VARIANTS[variant] || IDLE_VARIANTS.subtle,
+        className,
+      )}
+    >
+      {loading ? (
+        <Loader2 size={glyph} className="motion-safe:animate-spin" aria-hidden="true" />
+      ) : Icon ? (
+        <Icon size={glyph} aria-hidden="true" />
+      ) : null}
+      {label}
+    </button>
+  );
+});
+
+// ONE solid approve per list (used by the Freigaben list; it lives here, beside the approve
+// button's own tones, because the approve green belongs to this file). Every row's approve (data-row-approve) is tonal; the list turns
+// one of them solid: the hovered row's, else (no row hovered) the keyboard row's (data-focused).
+// While a selection exists the list drops these and the toolbar's bulk approve is the one
+// solid action. Pure CSS (:hover, :has), no hover state in JS.
+export const ONE_SOLID_APPROVE = [
+  '[&_li:hover_[data-row-approve]:enabled]:bg-emerald-700',
+  '[&_li:hover_[data-row-approve]:enabled]:text-white',
+  'dark:[&_li:hover_[data-row-approve]:enabled]:bg-emerald-400',
+  'dark:[&_li:hover_[data-row-approve]:enabled]:text-emerald-950',
+  '[&:not(:has(li:hover))_li[data-focused]_[data-row-approve]:enabled]:bg-emerald-700',
+  '[&:not(:has(li:hover))_li[data-focused]_[data-row-approve]:enabled]:text-white',
+  'dark:[&:not(:has(li:hover))_li[data-focused]_[data-row-approve]:enabled]:bg-emerald-400',
+  'dark:[&:not(:has(li:hover))_li[data-focused]_[data-row-approve]:enabled]:text-emerald-950',
+].join(' ');
+
+export default ActionButton;

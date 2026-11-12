@@ -1,0 +1,95 @@
+# secrets + local config
+.env
+config.json
+
+# private forward-port state - kept as an untracked LOCAL copy, never public.
+# The forward/reverse port tooling points here; a working sync/ in the tree is
+# fine, it just never gets committed again.
+sync/
+
+# owner-only go-live runbook (exact destructive commands + private identifiers).
+# Never commit; it is handed to the owner out of band.
+GO-LIVE-OWNER-STEPS.md
+
+# runtime state (quarantine copies too)
+state.json
+state.json.corrupt-*
+*.log
+
+# dependencies + build output
+# node_modules is ignored WITHOUT a trailing slash, so it matches a node_modules of
+# ANY type at any depth: directory, regular file, or symlink (mode 120000). A dir-only
+# `node_modules/` rule once let a self-referential `node_modules` symlink get swept in
+# by a worktree `git add -A` and tracked on develop (fixed in 78e00cf); the ELOOP
+# self-loop then broke `npm run` / `node --run`. This bare form covers the
+# zero-dependency root (where node_modules is never legitimate) and every npm subtree
+# (app/, site-docs/, web/), against directories and symlink-files alike.
+node_modules
+app/dist/
+app/dist.new/
+app/dist.old/
+app/.dashboard-build.lock
+dist/
+# desktop installer staging (build-bundle.mjs / build-app.sh / Inno output)
+build/
+web/dist/
+.astro/
+
+# data/ RUNTIME artifacts only - the example seed campaign + media DO ship.
+# These are path-anywhere (no leading data/ anchor) so they are ALSO ignored
+# inside every per-client subtree (data/clients/<id>/...), not just at the root.
+# The anchored forms missed nested tenant paths and leaked runtime state.
+.mock-ledger.json
+.meta-block.json
+meta-lane.json
+covers/
+# Post trash (lib/writes.mjs deletePost): deleted posts kept 30 days beside their plan
+# (data/plans/<campaign>/post-plan.trash.json). Runtime state, never committed.
+*.trash.json
+# Client review link (spec 48): the per-client reviewer store holds token HASHES
+# + tails. Path-anywhere so it is ignored inside EVERY client subtree, including
+# the tracked data/clients/default/ (the negation above would otherwise expose it).
+reviewers.json
+
+# Spec 51: the per-client ed25519 signing key (private half). Path-anywhere so it is
+# ignored inside EVERY client subtree, including the tracked data/clients/default/
+# (the !data/clients/default/ re-include below would otherwise commit it), and at the
+# repo root for the un-migrated single-workspace fallback.
+attest-key.json
+
+# --- Multi-client tenant boundary -------------------------------------------
+# Per-client subtrees hold real credentials + campaign content. Only the shipped
+# generic 'default' demo client is tracked; every NAMED tenant (e.g.
+# data/clients/<tenant>/) stays LOCAL and never enters git. The client registry
+# + migration marker are runtime state (re-derived on boot by initMultiClient)
+# and are ignored so tenant ids never leak into a public repo.
+data/clients.json
+data/.migrated-to-clients
+data/.dashboard-update.json
+data/.whats-new.json
+data/clients/*
+!data/clients/default/
+# Live cloud workspace pairing (workspace UUID + brand map) — local runtime state, never public.
+data/cloud.json
+data/cloud.json.bak
+# Install-wide "one digest notification a day" stamp (lib/notify.mjs) — runtime state.
+data/notify-digest.json
+# Ad-hoc backup archives of live client data: keep them in ~/pendpost-data-backups, never in git.
+data/*.tgz
+data/*.tar.gz
+
+# Local opt-in: presence makes launcher/serve.sh rebuild app/dist on every agent
+# start (a dev convenience). Stays LOCAL so shipped installs never rebuild on boot.
+.build-on-boot
+
+# Local agent tooling (Claude Code skills + launch config) — kept on disk, not shipped to the public repo.
+.claude/
+
+# Design / marketing source — kept on disk, never shipped to the public repo.
+# (Product media the site/app actually references lives under data/media and brand/.)
+videos/
+mockups/
+
+# os cruft
+.DS_Store
+.vercel

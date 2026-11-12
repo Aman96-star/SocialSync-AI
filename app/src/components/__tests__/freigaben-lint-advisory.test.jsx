@@ -1,0 +1,103 @@
+import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { axeClean } from '../../test-utils/axe.js';
+import Freigaben from '../Freigaben.jsx';
+import { TooltipProvider } from '../ui/Tooltip.jsx';
+import { ConfirmProvider } from '../ui/confirm.jsx';
+import { I18nProvider } from '../../lib/i18n.js';
+
+// The advisory brand-lint badge must be exactly that: ADVISORY. Rendering it on a
+// card whose caption trips a severity:'error' brand rule must NOT disable the
+// Approve/Reject actions - the gate lives server-side in lib/scheduler.mjs and is
+// byte-untouched. We mock the write/read layer so the test asserts enablement,
+// not the network. lintText returns a tripping envelope so the badge appears.
+const approvePost = vi.fn(() => Promise.resolve({ ok: true }));
+const rejectPost = vi.fn(() => Promise.resolve({ ok: true }));
+const lintText = vi.fn(() =>
+  Promise.resolve({ ok: true, clean: false, errors: 1, warnings: 0, findings: [{ rule: 'banned', severity: 'error', match: 'x', index: 0, hint: 'no' }] }),
+);
+
+vi.mock('../../lib/api.js', () => ({
+  // A new dependency of the approval card: fail OPEN in tests (no content blockers) so
+  // the approve button keeps its pre-gate behaviour here; blocking is covered in its own test.
+  usePlatformValidate: () => ({ data: null }),
+  approvePost: (...a) => approvePost(...a),
+  rejectPost: (...a) => rejectPost(...a),
+  lintText: (...a) => lintText(...a),
+  usePendpostHealth: () => ({ data: null }),
+  useConfig: () => ({ data: null }),
+  // Freigaben reads the connected accounts once at the parent for the destination strip.
+  useAccounts: () => ({ data: null, isLoading: false, isError: false }),
+}));
+
+const campaigns = [
+  {
+    id: 'spring',
+    active: true,
+    posts: [
+      {
+        id: 'p1',
+        campaign: 'spring',
+        title: 'Spring promo',
+        caption: 'a caption that trips a brand rule',
+        platforms: ['instagram', 'linkedin'],
+        approval: 'pending',
+        derivedState: 'draft',
+        scheduledAt: '2026-07-01T10:00:00Z',
+        type: 'reel',
+      },
+    ],
+  },
+];
+
+function renderFreigaben() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <I18nProvider locale="en">
+        <TooltipProvider>
+          <ConfirmProvider>
+            <Freigaben campaigns={campaigns} onOpen={() => {}} />
+          </ConfirmProvider>
+        </TooltipProvider>
+      </I18nProvider>
+    </QueryClientProvider>,
+  );
+}
+
+beforeEach(() => {
+  approvePost.mockClear();
+  rejectPost.mockClear();
+  lintText.mockClear();
+});
+
+// The badge renders only after the react-query lint pass resolves and React
+// re-renders. Testing Library's default findBy poll is 1s; under the capped
+// 4-fork parallel run that async resolve can be starved past 1s on a loaded
+// machine, which flaked this file (the per-test budget is a roomy 60s). Wait
+// generously - matching the config's Radix-tree timeout philosophy - so the
+// assertion tracks the badge's presence, not the scheduler's mood.
+const BADGE_WAIT = { timeout: 15000 };
+
+describe('Freigaben advisory brand-lint badge', () => {
+  it('shows the advisory error badge yet keeps Approve and Reject fully enabled (advisory, not a gate)', async () => {
+    renderFreigaben();
+    // Badge surfaces (errors>0 on a target platform).
+    expect(await screen.findByRole('status', {}, BADGE_WAIT)).toBeInTheDocument();
+    // One error reads singular ("1 brand error", never "1 brand errors").
+    expect(screen.getByText('1 brand error')).toBeInTheDocument();
+    // The advisory badge does NOT disable the actions.
+    const approve = screen.getByRole('button', { name: /approve/i });
+    expect(approve).toBeEnabled();
+    // Reject leads the row menu, enabled there too.
+    fireEvent.click(screen.getByRole('button', { name: /^more actions$/i }));
+    expect(screen.getByRole('menuitem', { name: /reject/i })).toBeEnabled();
+  });
+
+  it('has no axe violations with the badge present', async () => {
+    const { container } = renderFreigaben();
+    await screen.findByRole('status', {}, BADGE_WAIT);
+    expect(await axeClean(container)).toHaveNoViolations();
+  });
+});

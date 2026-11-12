@@ -1,0 +1,83 @@
+name: CI
+
+# paths-ignore skips CI on non-code commits (docs, memory, root overview HTML).
+# `*.html` matches root-level overview files only — web/ sources are unaffected.
+# Dependabot bumps always touch package.json, so they are never skipped (keeps
+# the "CI" name → dependabot-auto-merge's workflow_run trigger intact).
+#
+# CI does NOT run on direct pushes to develop (the daily working branch) — that
+# volume was draining the free Actions quota. develop is covered by the CI run on
+# its promotion PR into staging, plus PR runs and staging/main push runs below.
+on:
+  pull_request:
+    branches: [develop, staging, main]
+    paths-ignore: ['**/*.md', 'docs/**', '.claude/**', '*.html']
+  push:
+    branches: [staging, main]
+    paths-ignore: ['**/*.md', 'docs/**', '.claude/**', '*.html']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 = engines floor (.nvmrc) + lowest supported; 22 = current LTS.
+        # Node 18 dropped: EOL 2025-04-30.
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm run check
+
+  build-dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - run: npm run build
+        working-directory: app
+      - run: npm test
+        working-directory: app
+
+  build-web:
+    # site-only: web/ is private (not shipped to the public OSS repo). Gate by
+    # repo so the public pendpost/pendpost CI doesn't try to build a missing web/.
+    if: github.repository == 'pendpost/site'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          # Astro needs a newer Node 22 patch than the runner's cached one (22.23.3
+          # failed: astro wants >=22.23.4), so fetch the latest 22.x instead.
+          check-latest: true
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run check
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: npm run check:aeo
+        working-directory: web

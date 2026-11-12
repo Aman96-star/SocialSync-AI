@@ -1,0 +1,79 @@
+{
+  "name": "pendpost",
+  "version": "2.13.1",
+  "description": "pendpost is a free, open-source (MIT), local-first social media planner where an AI agent drafts and schedules posts across Instagram, Facebook, LinkedIn, YouTube, X, Telegram, Discord, Mastodon, and Nostr, plus long-form blogs on WordPress and Ghost, with Reddit, Pinterest, TikTok, and Google Business Profile in beta, all behind a human approval gate you control.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Nomadik GmbH",
+  "homepage": "https://pendpost.com",
+  "mcpName": "io.github.pendpost/pendpost",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pendpost/pendpost.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pendpost/pendpost/issues"
+  },
+  "bin": {
+    "pendpost": "bin/pendpost.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "social-media",
+    "social-media-scheduler",
+    "scheduler",
+    "mcp",
+    "mcp-server",
+    "agent",
+    "approval-gate",
+    "local-first",
+    "self-hosted",
+    "open-source",
+    "automation",
+    "buffer-alternative",
+    "instagram",
+    "facebook",
+    "linkedin",
+    "youtube",
+    "x"
+  ],
+  "files": [
+    "server.mjs",
+    "lib/",
+    "scripts/",
+    "bin/",
+    "app/dist/",
+    "data/plans/",
+    "data/media/",
+    "data/captions/",
+    "rules.json",
+    "config.example.json",
+    ".env.example",
+    "README.md",
+    "LICENSE",
+    "DISCLAIMER.md",
+    "SECURITY.md",
+    "AGENTS.md"
+  ],
+  "pendpost": {
+    "browserServer": {
+      "package": "@playwright/mcp",
+      "version": "0.0.80",
+      "launchedBy": "npx -y @playwright/mcp@<version>",
+      "note": "Spec 50 P4 / L3. The engage child's browser MCP server, PINNED to an exact version. It is deliberately NOT a runtime dependency: pendpost stays zero-dep (NFR-LIC-01, test/supply-chain.test.mjs) and nothing is installed into the engine. The child's own --mcp-config launches it through npx at this exact version, so a background npm release can never change what a spawned child may do to a live account. lib/engage-browser.mjs PLAYWRIGHT_MCP_VERSION must equal the version above; test/engage-browser.test.mjs asserts it."
+    }
+  },
+  "scripts": {
+    "start": "node bin/pendpost.mjs",
+    "dev": "node --watch server.mjs",
+    "dev:live": "sh launcher/dev-live.sh",
+    "build": "cd app && npm install && npm run build",
+    "prepack": "npm run build",
+    "check": "node --check server.mjs && for f in lib/*.mjs lib/drivers/*.mjs scripts/*.mjs bin/*.mjs test/*.mjs; do node --check \"$f\" || exit 1; done && node scripts/check-encoding.mjs && node test/parity-check.mjs && for t in test/*.test.mjs; do node \"$t\" || exit 1; done",
+    "check:fast": "node ops/engine-check.mjs",
+    "hooks:install": "node ops/install-hooks.mjs",
+    "publish:docs": "node ops/publish-docs.mjs"
+  }
+}
