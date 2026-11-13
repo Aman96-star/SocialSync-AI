@@ -42,3 +42,17 @@ This project is designed for local-first use and keeps the publishing process be
 ## License
 
 MIT
+
+// Starting to Learn Ai Agents build 
+
+Before touching AI, be comfortable with:
+Python (functions, classes, async)
+Basic DSA (lists, maps, queues)
+System design basics (APIs, caching, databases)
+
+---------------------------------------------------
+* Spend a little time on classical ML, then neural networks, then transformers. The goal is simple:     when  a model gives a strange answer, you should have a guess about why.
+
+* This step also covers NumPy, Pandas, and a bit of PyTorch. Light touch is fine. Depth can come later.
+---------------------------------------------------
+* knowledge with RAG(Retrieval Augmented Generation)
