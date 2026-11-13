@@ -1,249 +1,44 @@
-Phase 1 – YouTube AI Agent
+# SocialSync-AI
 
-Research, scripts, voice, video generation and publishing.
-First priority
+A lightweight AI-powered social media workflow for planning, drafting, scheduling, and publishing content with a human approval gate.
 
+## Overview
 
-Phase 2 – Instagram Agent
+SocialSync-AI helps teams and creators:
 
-Adapt videos into Reels, generate captions and create carousels.
+- generate social content ideas and draft captions
+- organize posts across multiple channels
+- review and approve content before publishing
+- schedule or trigger publishing workflows
+- keep campaign state and assets in one place
 
+## Getting started
 
-Phase 3 – LinkedIn Agent
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+2. Start the app locally:
+   ```bash
+   npm start
+   ```
+3. Open the app in your browser:
+   ```text
+   http://127.0.0.1:8090
+   ```
 
-Convert technology topics into professional educational posts and project updates.
+## Project structure
 
+- `app/` - frontend dashboard and client UI
+- `lib/` - core application logic and integrations
+- `scripts/` - platform-specific publishing helpers and workflows
+- `data/` - local plans, media, and generated content
+- `test/` - validation and regression checks
 
-Phase 4 – Central Orchestrator
+## Notes
 
-Connect all agents using LangGraph and shared content state.
-
-
-Phase 5 – Publishing and Scheduling
-
-OAuth integrations, content calendar, approvals and retries.
-
-
-Phase 6 – Analytics
-
-Measure engagement and learn which content formats work best.
-
-# pendpost
-
-**Your AI agent drafts and schedules your social posts. Nothing publishes until you approve it.**
-
-[![CI](https://github.com/pendpost/pendpost/actions/workflows/ci.yml/badge.svg)](https://github.com/pendpost/pendpost/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/pendpost.svg)](https://www.npmjs.com/package/pendpost)
-[![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.pendpost%2Fpendpost-7c3aed.svg)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.pendpost/pendpost)
-[![Glama](https://img.shields.io/badge/Glama-listed-0f172a.svg)](https://glama.ai/mcp/servers/imuc6rdqwp)
-[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](package.json)
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="https://pendpost.com/readme/readme-hero-light.png">
-    <img src="https://pendpost.com/readme/readme-hero-dark.png" alt="pendpost: your agents draft, you approve, then it ships" width="820">
-  </picture>
-</p>
-
-<p align="center">
-  <a href="https://pendpost.com">Website</a> · <a href="https://docs.pendpost.com">Docs</a> · <a href="#quickstart">Quickstart</a> · <a href="https://pendpost.com/services">Cloud</a> · <a href="https://github.com/pendpost/pendpost/releases">Releases</a>
-</p>
-
-```bash
-npx -y pendpost   # Node 22+, then open http://127.0.0.1:8090
-```
-
-If this is the approval step you were looking for, a star on the repo helps other people find it.
-
-pendpost is a free, open-source (MIT), local-first social media planner where an AI agent drafts and schedules posts across Instagram, Facebook, LinkedIn, YouTube, X, Telegram, Discord, Mastodon, and Nostr, plus long-form blogs on WordPress and Ghost, with Reddit, Pinterest, TikTok, and Google Business Profile in beta, all behind a human approval gate you control. It is MCP-native: AI agents draft, lint, schedule, and queue your posts, but nothing goes live until a human approves it. It is built for developers, agencies, and technical solopreneurs who want agents to do the work without handing them the keys, and without getting accounts flagged.
-
-## Why pendpost is different (not just a scheduler)
-
-Most "AI social" tools are schedulers with an agent bolted on. pendpost is the opposite. It is an operations layer designed around the agent-plus-human workflow, and these are the parts a scheduler does not give you:
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="https://pendpost.com/readme/approval-gate-diagram-light.png">
-    <img src="https://pendpost.com/readme/approval-gate-diagram-dark.png" alt="The approval gate: an agent drafts, you approve by default, and only then does it publish" width="820">
-  </picture>
-</p>
-
-- **Human approval gate.** Every post carries an approval state (`draft`, `approved`, `rejected`) and is fail-closed: a post with no approval will not publish. `plan_create_post` always creates a draft, and only `approve_post` or `reject_post` can flip it. Nothing publishes until it's approved. By default that's you; auto-approve is owner-only and revocable.
-- **Anti-ban circuit breakers.** A Meta error 368 (an action block) trips a breaker that halts the Meta lane and never auto-resumes, because 368 carries no machine-readable clear time. Health probes send zero Graph traffic while blocked. A cadence cap defers bursts rather than dropping them, and a lane pause kill switch is always available.
-- **Humanizer brand-lint.** Captions are checked before publish against editable rules in `rules.json`. The humanizer layer flags English AI-writing tells. Errors block publish; warnings are advisory.
-- **Honest native scheduling.** Where a platform supports it (YouTube `publishAt`, Mastodon, WordPress, Ghost), pendpost hands the post to the platform's own scheduler, so it goes out even when your computer is off. Instagram, Facebook, LinkedIn, and X go out at their time from pendpost itself: from the optional 24/7 cloud service when you turn it on, otherwise from your computer while pendpost runs, or from an [always-on host](https://docs.pendpost.com/always-on). It stays honest about which cover/thumbnail mechanics actually apply per platform.
-- **Dual interface.** A web dashboard and any MCP client drive the same contract. A parity test enforces that every capability ships on both faces.
-- **German and Swiss localization.** Run the dashboard, digest, and notifications in English or real Swiss German (`de-CH`, with proper umlauts and 24-hour Swiss dates); set the language in Settings. See the [localization docs](https://docs.pendpost.com/localization).
-
-## Quickstart
-
-One line, no account (needs Node 22 or newer):
-
-```bash
-npx -y pendpost
-# then open http://127.0.0.1:8090
-```
-
-No account, no signup - pendpost runs locally and starts immediately. You can draft, approve, and schedule a full campaign right away. The planner starts empty; press New post or ask your agent for a first draft. Connect a platform in **Setup** when you are ready to publish - until then a lane is live-but-unauthenticated, so publishing simply waits for the connection rather than faking it.
-
-Prefer git or docker?
-
-```bash
-# git
-git clone https://github.com/pendpost/pendpost pendpost
-cd pendpost
-npm start            # or: node bin/pendpost.mjs (builds the dashboard on first run)
-# then open http://127.0.0.1:8090
-```
-
-```bash
-# docker
-docker compose up
-# then open http://127.0.0.1:8090
-```
-
-## The dashboard
-
-The planner and the approval queue are the two screens you live in: draft and schedule on the left, approve or reject on the right. Nothing on the right can approve itself.
-
-| Planner | Approval queue |
-| --- | --- |
-| ![The pendpost planner: a calendar of drafted and scheduled posts](https://pendpost.com/readme/dashboard-planner.png) | ![The pendpost approval queue: posts waiting for a human decision](https://pendpost.com/readme/dashboard-approvals.png) |
-
-## MCP clients
-
-The easiest path self-boots: pendpost speaks MCP over native stdio, so the client launches the server for you - nothing to start first.
-
-Claude Desktop (one-click): install the pendpost `.mcpb` bundle attached to each [GitHub release](https://github.com/pendpost/pendpost/releases). It self-boots `npx -y pendpost --stdio` and opens the approval dashboard in the same process.
-
-Claude Code and Cursor plugins: the Claude plugin bundle lives in [`packaging/claude-plugin/`](packaging/claude-plugin/) and the Cursor plugin manifest in [`.cursor-plugin/`](.cursor-plugin/). The Cursor plugin launches the pinned `npx pendpost@<version> --stdio` server; the Claude plugin connects to a running pendpost at `http://127.0.0.1:8090/mcp`, so start `npx pendpost` first. Agents that install servers for you (for example Cline) can follow [`llms-install.md`](llms-install.md).
-
-Any stdio MCP client:
-
-```json
-{
-  "mcpServers": {
-    "pendpost": { "command": "npx", "args": ["-y", "pendpost", "--stdio"] }
-  }
-}
-```
-
-Advanced / dev (HTTP transport): pendpost also serves MCP over streamable-HTTP at `/mcp`. This needs the server already running via `npx pendpost`:
-
-```bash
-claude mcp add --transport http pendpost http://127.0.0.1:8090/mcp
-```
-
-### AI-assisted setup (Claude for Chrome)
-
-Going live on a real platform means creating a developer app in each vendor's portal and running one OAuth ceremony. pendpost makes that agent-drivable: on each incomplete card in the dashboard's **Setup** page, a **Copy AI prompt** button copies a ready-to-paste, secret-safe prompt for Claude for Chrome that drives the portal for that one platform. You authenticate at every login/consent gate, and the credential is minted locally by the CLI - it never passes through the agent or the chat. The same setup contract is documented for any agent in [`AGENTS.md`](AGENTS.md).
-
-## What the MCP tools do
-
-Every capability is an MCP tool, and the dashboard mirrors it. Read-only tools can never publish; write tools create drafts and are gated by the approval rules above. Grouped by what they do:
-
-- **Read and inspect:** `plan_list`, `plan_get`, `account_status`, `assets_list`, `activity_log`, `validate_media`, `platform_validate`, `pendpost_health`, `publish_preview`, `brand_lint`, `generate_digest`, `config_get`, `clients_overview`.
-- **Compose:** `plan_create_post`, `plan_update_post`, `plan_delete_post`, `restore_post`, `campaign_create`, `campaign_set_active`.
-- **Approve (the human gate):** `approve_post`, `reject_post`. Nothing publishes until it's approved; by default that's you.
-- **Schedule and publish:** `scheduler_set`, `publish_due_run`, `reschedule`, `unschedule`, `mark_posted`, `verify_post`.
-- **Covers and assets:** `set_cover`, `clear_cover`, `asset_upload`, `rename_asset`, `delete_asset`.
-- **Insights and safety:** `fetch_insights`, `token_refresh`, `pendpost_record_block`, `health_recheck`, `meta_lane_set`.
-- **Config and clients:** `config_set`, `client_create`, `client_update`, `client_archive`, `client_list`, `client_set_active`.
-
-The authoritative count and the read/write split are derived from `lib/mcp.mjs` and verified by `test/parity-check.mjs` (see the [MCP docs](https://docs.pendpost.com/mcp-server)). Each tool also carries `readOnlyHint`/`destructiveHint`/`title` annotations in `tools/list`.
-
-## Going live
-
-When you are ready to publish, connect each platform in **Setup** (or copy `.env.example` to `.env` and fill in only the platforms you use). A platform publishes once its credential is present; until then it is live-but-unauthenticated and publishing waits for the connection. (`PENDPOST_MODE=mock` exists only as a test/demo fixture that routes every lane through the credential-free mock driver.)
-
-Each platform has an interactive setup ceremony that writes to `.env`:
-
-```bash
-# Meta (Facebook + Instagram). A System User token is preferred for automation.
-node scripts/meta-social.mjs setup-system-user \
-  --system-user-token <T> --page-id <ID> --app-id <ID> --app-secret <S>
-# (or `node scripts/meta-social.mjs setup` for a long-lived Page token)
-
-# LinkedIn (after creating an OAuth app)
-node scripts/linkedin-social.mjs auth
-
-# YouTube (after creating an OAuth client)
-node scripts/yt-social.mjs auth
-
-# X (Twitter), OAuth 2.0 PKCE (browser). OAuth 1.0a needs no command - see below.
-node scripts/x-social.mjs auth
-
-# Static-credential lanes (no browser): paste the credential into .env (or use
-# the dashboard Setup form), then validate with the engine's auth command.
-node scripts/telegram-social.mjs auth   # TELEGRAM_BOT_TOKEN + TELEGRAM_CHANNEL_ID
-node scripts/discord-social.mjs auth    # DISCORD_WEBHOOK_URL
-node scripts/mastodon-social.mjs auth   # MASTODON_INSTANCE_URL + MASTODON_ACCESS_TOKEN
-node scripts/wordpress-social.mjs auth  # WORDPRESS_SITE_URL + _USERNAME + _APP_PASSWORD
-node scripts/ghost-social.mjs auth      # GHOST_SITE_URL + GHOST_ADMIN_API_KEY
-node scripts/nostr-social.mjs keygen --save && node scripts/nostr-social.mjs auth  # + NOSTR_RELAYS
-```
-
-Running more than one client? Append `--client <client-id>` to any command above so the credential lands in that client's `.env` (single-client installs don't need it, and `pendpost_health`'s `connectAction` already fills the flag in for you).
-
-**X (Twitter)** supports two auth paths; **OAuth 1.0a is recommended** because it needs no browser and sidesteps the `ERR_TOO_MANY_REDIRECTS` that some apps hit on X's OAuth 2.0 consent screen.
-
-- **OAuth 1.0a (recommended, zero browser).** In the X developer portal: (1) set the app's **User authentication settings to Read and Write FIRST**; (2) then under **Keys and tokens**, generate/regenerate **both** the API Key/Secret **and** the Access Token/Secret; (3) paste all four into `.env` as `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`. The lane goes live the moment `X_ACCESS_TOKEN_SECRET` is set - no `auth` command. Verify with `node scripts/x-social.mjs probe` (prints `connected as @handle`). Gotchas, in order:
-  - All four values must come from the **same app** and the **same generation**.
-  - Regenerating the API Key/Secret **invalidates the Access Token/Secret** - so always regenerate the Access Token/Secret **after** the API Key/Secret, never before.
-  - One wrong character yields `401 "Could not authenticate you"` (code 32), which masquerades as an access-token problem. **Copy the values from the portal; do not hand-type them.**
-- **OAuth 2.0 PKCE (browser).** Create an OAuth 2.0 confidential client with callback `http://localhost:8087/callback` and scopes `tweet.read tweet.write users.read media.write offline.access`, then run `node scripts/x-social.mjs auth`. The access token lasts ~2h and the refresh token rotates; pendpost refreshes both automatically before each run.
-
-See `.env.example` for the full list of environment variables per platform.
-
-## Brand-lint + humanizer
-
-Captions run through a brand-lint pass before they can publish. The rule set lives in `rules.json`, which you edit directly. Each rule is an object with an `id`, a `severity` (`error` blocks, `warn` is advisory), a `matcher` (a regex or a platform-aware built-in like `captionLength`, `hashtagCount`, `allCaps`, `brokenLink`), and a `hint`. The shipped default also includes humanizer rules that flag English AI-writing tells (AI vocabulary, em dashes, negative parallelism, reflexive rule-of-three padding, filler and hedging, promotional puffery). To disable a rule, delete its object; to add one, append an object. A `rules.json` at your workspace root overrides the shipped default. `brand_lint` is both an MCP tool and the dashboard composer's lint panel.
-
-## Architecture
-
-pendpost is one zero-dependency Node process (`server.mjs`) with four faces: a REST API at `/api`, an MCP server at `/mcp` (streamable-HTTP, JSON-RPC 2.0, 138 tools), a `/media` face that range-streams local files under `data/`, and `/`, which serves the built React dashboard from `app/dist`. Backend logic lives in `lib/*.mjs`. There are 14 publish engines in `scripts/` - one per platform (`meta-social.mjs` handles Facebook and Instagram) - each spawned as a subprocess on a scheduler tick or on demand and each emitting a JSON envelope. Plans and state are local JSON. The workspace root holding `.env`, `config.json`, `state.json`, and `data/` is overridable via `PENDPOST_ROOT` (default: the install dir).
-
-## Platforms
-
-Instagram, Facebook, LinkedIn, YouTube, X, Telegram, Discord, Mastodon, Nostr, WordPress, and Ghost are live. Reddit, Pinterest, TikTok, and Google Business Profile are in beta. Each engine handles its own auth, publishing, native scheduling, cover/thumbnail mechanics, and read-only insights. YouTube, Mastodon, WordPress, and Ghost schedule natively, so those posts fire even when pendpost is off. Instagram, Facebook, LinkedIn, X, Telegram, Discord, and Nostr are published by pendpost itself at their scheduled time: by the scheduler on your computer, or by the optional 24/7 cloud service.
-
-## Security
-
-pendpost binds `127.0.0.1` (loopback) by default, never phones home, and keeps secrets only in your own `.env` (which is gitignored). See [SECURITY.md](SECURITY.md) for the full posture and how to report a vulnerability.
-
-## Privacy Policy
-
-pendpost runs on your own machine and sends nothing to us (Nomadik GmbH).
-
-- **What it collects:** only what you give it. Plans, drafts, media and activity history live in its local `data/` folder, and your platform credentials live in your own `.env`.
-- **How it uses and stores data:** everything stays on your machine. Content goes out only to the social platforms you connect, to publish the posts you approve.
-- **Third parties:** the MCP client you connect (for example Claude Desktop or Cursor) and its AI model provider see whatever your agent reads through pendpost's tools, under your own account and their terms. Radar reads public posts from the sources you turn on.
-- **Retention:** your data stays until you delete the folder; we hold no copy. The optional 24/7 cloud service keeps plans, encrypted tokens and audit records while you subscribe, and deletes any managed copy after a short safety window once you leave.
-- **Contact:** hello@pendpost.com
-
-The full policy is at [pendpost.com/privacy](https://pendpost.com/privacy).
-
-## Shaping pendpost
-
-pendpost is built in the open and we want your feedback. There are three ways in, and none of them make the app phone home:
-
-- **Quick feedback or an idea:** use the **Share feedback** link in the dashboard (it opens a prefilled GitHub page in your browser and never sends your `.env` or any secret), post in [Discussions](https://github.com/pendpost/pendpost/discussions), or use the feedback issue form.
-- **A bug or a feature request:** open an issue and pick the matching form.
-- **A deeper proposal** (a new integration seam, a change to how the core works): open an RFC. See [`docs/rfcs/README.md`](docs/rfcs/README.md).
-
-No account? A short feedback form on [pendpost.com](https://pendpost.com) forwards into GitHub for you. See [SUPPORT.md](SUPPORT.md) for where to get help and [CONTRIBUTING.md](CONTRIBUTING.md) for how feedback turns into issues and pull requests.
-
-## Status
-
-pendpost is maintained part-time by a small team and is early. Expect rough edges, and set your response-time expectations accordingly.
-
-## Docs
-
-The full reference lives at **[docs.pendpost.com](https://docs.pendpost.com)**. Marketing, pricing, and every [download option](https://pendpost.com/download) live at **[pendpost.com](https://pendpost.com)**.
+This project is designed for local-first use and keeps the publishing process behind an approval step so content is reviewed before it goes live.
 
 ## License
 
-MIT, Copyright 2026 Nomadik GmbH. See [LICENSE](LICENSE). Please also read [DISCLAIMER.md](DISCLAIMER.md) for the responsible-use posture and [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
-#   S o c i a l S y n c - A I  
- 
+MIT
